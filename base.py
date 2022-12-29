@@ -63,8 +63,8 @@ THRESHOLD = 0.5
 BASE_OUTPUT = "/workspace/data/torch/output"
 
 # define the path to the output serialized model and model training plot
-MODEL_PATH = os.path.join(BASE_OUTPUT, "unet_dl1_dcy0.pth")
-PLOT_PATH = os.path.sep.join([BASE_OUTPUT, "unet_dl1_dcy0_plot.png"])
+MODEL_PATH = os.path.join(BASE_OUTPUT, "unet_dl1_dcy0_base.pth")
+PLOT_PATH = os.path.sep.join([BASE_OUTPUT, "unet_dl1_dcy0_base_plot.png"])
 
 
 # In[5]:
@@ -138,12 +138,12 @@ def SegregateData(dataset, subdir):
                 l3.append(q)
 
             l[i-1][k][0] = np.asarray(l1, dtype=np.float32)/255
-            l[i-1][k][1] = np.asarray(l2, dtype=np.float32)/255
+            l[i-1][k][1] = ((np.asarray(l2, dtype=np.float32)/255)>0.5).astype(np.float32)
             l[i-1][k][2] = l3
 
     return l
 
-# l = SegregateData(dataset, subdir)
+l = SegregateData(dataset, subdir)
 
 # X_train_benign   --> l[0][0][0]  # X_test_benign   --> l[1][0][0]  # X_validation_benign   --> l[2][0][0]
 # y_train_benign   --> l[0][0][1]  # y_test_benign   --> l[1][0][1]  # y_validation_benign   --> l[2][0][1]
@@ -209,53 +209,34 @@ class Encoder(nn.Module):
         
         self.max = nn.MaxPool2d(2)
         self.conv_block = DoubleConv(in_channels, out_channels)
+        # self.dropout = nn.Dropout2d(p=0.3)
 
     def forward(self, x):
         
         conv = self.conv_block(x)
         pool = self.max(conv)
-
+        # drop = self.dropout(pool)
+        
+        # return conv, drop
         return conv, pool
 
-
-# In[9]:
-
-
-class DecoderB1(nn.Module):
-    
-    def __init__(self, in_channels, mid_channels, out_channels):
-        super().__init__()
-        
-        self.conv_transpose = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
-        self.conv_block = DoubleConv(mid_channels, out_channels)
-    
-    def forward(self, x, skip_features, skip_features_b2):
-
-        x = self.conv_transpose(x)
-        x = torch.cat([x, skip_features, skip_features_b2],dim=1)
-        x = self.conv_block(x)
-
-        return x
-
-class DecoderB2(nn.Module):
+class Decoder(nn.Module):
     
     def __init__(self, in_channels, out_channels):
         super().__init__()
         
         self.conv_transpose = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
         self.conv_block = DoubleConv(in_channels, out_channels)
+        # self.dropout = nn.Dropout2d(p=0.3)
     
     def forward(self, x, skip_features):
 
-        conv_transpose = self.conv_transpose(x)
-        x = torch.cat([conv_transpose, skip_features],dim=1)
+        x = self.conv_transpose(x)
+        x = torch.cat([x, skip_features],dim=1)
+        # x = self.dropout(x)
         x = self.conv_block(x)
 
-        return x, conv_transpose
-
-
-# In[10]:
-
+        return x
 
 class Branch1(nn.Module):
     def __init__(self, in_channels, mid_channels, out_channels):
@@ -272,30 +253,9 @@ class Branch1(nn.Module):
         
         return x
 
-class Branch2(nn.Module):
-    def __init__(self, in_channels, mid_channels, out_channels):
-        super().__init__()
-        
-        self.conv_block = DoubleConv(in_channels, mid_channels)
-        self.conv_2d = nn.Conv2d(mid_channels, out_channels, kernel_size=1, bias=False)
-        self.sigmoid = nn.Sigmoid()
-        
-    def forward(self, x):
-        x = self.conv_block(x)
-        x = self.conv_2d(x)
-        x = self.sigmoid(x)
-        
-        return x
-
-
-# In[11]:
-
-
 class UNet(nn.Module):
-    def __init__(self, input_shape=256, n_input_channels=3, n_output_channels_b1=1, n_output_channels_b2=3, n_features=64, latent_dim=128):
+    def __init__(self, n_input_channels, n_output_channels, n_features=64):
         super(UNet, self).__init__()
-        self.input_shape = input_shape
-        self.n_features = n_features
         
         self.down1 = Encoder(n_input_channels, n_features)
         self.down2 = Encoder(n_features, n_features*2)
@@ -304,49 +264,13 @@ class UNet(nn.Module):
         
         self.bridge = DoubleConv(n_features*8, n_features*16)
         
-        self.upb1_1 = DecoderB1(n_features*16,n_features*24, n_features*8)
-        self.upb1_2 = DecoderB1(n_features*8,n_features*12, n_features*4)
-        self.upb1_3 = DecoderB1(n_features*4,n_features*6, n_features*2)
-        self.upb1_4 = DecoderB1(n_features*2,n_features*3, n_features)
+        self.up1 = Decoder(n_features*16, n_features*8)
+        self.up2 = Decoder(n_features*8, n_features*4)
+        self.up3 = Decoder(n_features*4, n_features*2)
+        self.up4 = Decoder(n_features*2, n_features)
         
-        flatten_size = n_features*16 * int(input_shape/16) * int(input_shape/16)
+        self.outchannel1 = Branch1(n_features, n_features, n_output_channels)
         
-        self.intermediate1 = nn.Sequential(
-            nn.Linear(flatten_size, latent_dim*2),
-            nn.BatchNorm1d(latent_dim*2),
-            nn.ReLU(inplace=True),
-        )
-        
-        self.fc_mu = nn.Linear(latent_dim*2, latent_dim)
-        self.fc_var = nn.Linear(latent_dim*2, latent_dim)
-        
-        self.decoder_input = nn.Sequential(
-            nn.Linear(latent_dim, flatten_size),
-            nn.ReLU(inplace=True),
-        )
-        
-        self.upb2_1 = DecoderB2(n_features*16, n_features*8)
-        self.upb2_2 = DecoderB2(n_features*8, n_features*4)
-        self.upb2_3 = DecoderB2(n_features*4, n_features*2)
-        self.upb2_4 = DecoderB2(n_features*2, n_features)
-        
-        self.outchannel_b1_grayscale = Branch1(n_features, n_features, n_output_channels_b1)
-        self.outchannel_b1_rgb = Branch2(n_features, n_features, n_output_channels_b2)
-        self.outchannel_b2_grayscale = Branch2(n_features, n_features, n_output_channels_b2)
-    
-    def reparameterize(self, mu, logvar):
-        """
-        Reparameterization trick to sample from N(mu, var) from
-        N(0,1).
-        :param mu: (Tensor) Mean of the latent Gaussian [B x D]
-        :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
-        :return: (Tensor) [B x D]
-        """
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        
-        return eps * std + mu
-    
     def forward(self, x):
         
         conv1, pool1 = self.down1(x)
@@ -356,43 +280,14 @@ class UNet(nn.Module):
         
         bridge = self.bridge(pool4)
         
-        #2nd branch vae
+        decoder1 = self.up1(bridge, conv4)
+        decoder2 = self.up2(decoder1, conv3)
+        decoder3 = self.up3(decoder2, conv2)
+        decoder4 = self.up4(decoder3, conv1)
         
-        flattened_bridge = torch.flatten(bridge, start_dim=1)
-        intermediate1 = self.intermediate1(flattened_bridge)
+        logits1 = self.outchannel1(decoder4)
         
-        mu = self.fc_mu(intermediate1)
-        log_var = self.fc_var(intermediate1)
-        
-        z = self.reparameterize(mu,log_var)
-        
-        result = self.decoder_input(z)
-        reshaped_result = result.view(-1, self.n_features*16, int(self.input_shape/16),int(self.input_shape/16))
-        
-        # 2nd branch
-        decoder_b2_1,decoder_b2_conv_transpose_1 = self.upb2_1(reshaped_result, conv4)
-        decoder_b2_2,decoder_b2_conv_transpose_2 = self.upb2_2(decoder_b2_1, conv3)
-        decoder_b2_3,decoder_b2_conv_transpose_3 = self.upb2_3(decoder_b2_2, conv2)
-        decoder_b2_4,decoder_b2_conv_transpose_4 = self.upb2_4(decoder_b2_3, conv1)
-                
-        b2_rgb = self.outchannel_b2_grayscale(decoder_b2_4)
-        
-        # 1st branch
-        decoder_b1_1 = self.upb1_1(bridge, decoder_b2_conv_transpose_1, conv4)
-        decoder_b1_2 = self.upb1_2(decoder_b1_1, decoder_b2_conv_transpose_2, conv3)
-        decoder_b1_3 = self.upb1_3(decoder_b1_2, decoder_b2_conv_transpose_3, conv2)
-        decoder_b1_4 = self.upb1_4(decoder_b1_3, decoder_b2_conv_transpose_4, conv1)
-                
-        b1_gry = self.outchannel_b1_grayscale(decoder_b1_4)
-        b1_rgb = self.outchannel_b1_rgb(decoder_b1_4)
-        
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
-        
-        return b1_gry, b1_rgb, b2_rgb, kld_loss
-
-
-# In[12]:
-
+        return logits1
 
 #custom dice loss
 class DiceLoss(nn.Module):
@@ -461,8 +356,7 @@ validLoader = DataLoader(validDS, batch_size=BATCH_SIZE, shuffle=True,drop_last=
 n_features = 64
 input_shape= 256
 
-unet = UNet(input_shape=input_shape, n_input_channels=3, n_output_channels_b1=1,
-            n_output_channels_b2=3, n_features= n_features, latent_dim=128).to(DEVICE)
+unet = UNet(n_input_channels=3, n_output_channels=1, n_features= n_features).to(DEVICE)
 
 save_best_model = SaveBestModel()
 
@@ -483,20 +377,11 @@ validSteps = len(validDS) // BATCH_SIZE
 # initialize a dictionary to store training history
 train_history = {
     "train_loss": [],
-	"train_dice_loss": [],
-	"train_mse_b1_ip": [],
-	"train_mse_b2_ip": [],
-	"train_mse_b1_b2": [],
-	"train_kld_loss_": [],
 }
 
 valid_history = {
 	"valid_loss": [],
-    "valid_dice_loss": [],
-	"valid_mse_b1_ip": [],
-	"valid_mse_b2_ip": [],
-	"valid_mse_b1_b2": [],
-	"valid_kld_loss_": [],
+
 }
 
 # loop over epochs
@@ -534,14 +419,11 @@ for e in tqdm(range(NUM_EPOCHS)):
 		(x, y) = (x.to(DEVICE), y.to(DEVICE))
   
 		# perform a forward pass and calculate the training loss
-		pred_b1_gry, pred_b1_rgb, pred_b2_rgb, kld_loss = unet(x)
+		pred_b1_gry = unet(x)
 
 		dice_loss = dice(pred_b1_gry, y)
-		mse_b1_ip = mse(pred_b1_rgb.view(-1), x.view(-1))
-		mse_b2_ip = mse(pred_b2_rgb.view(-1), x.view(-1))
-		mse_b1_b2 = mse(pred_b1_rgb.view(-1), pred_b2_rgb.view(-1))
 
-		loss = dice_loss + mse_b1_ip + mse_b2_ip + mse_b1_b2 + kld_loss
+		loss = dice_loss
 
 		# first, zero out any previously accumulated gradients, then perform backpropagation, and then update model parameters
 		optimizer.zero_grad()
@@ -549,13 +431,7 @@ for e in tqdm(range(NUM_EPOCHS)):
 		optimizer.step()
 		
 		# add the loss to the total training loss so far
-  
 		total_train_dice_loss += dice_loss
-		total_train_mse_b1_ip += mse_b1_ip
-		total_train_mse_b2_ip += mse_b2_ip
-		total_train_mse_b1_b2 += mse_b1_b2
-		total_train_kld_loss_ += kld_loss
-  
 		total_train_loss += loss
 	
  
@@ -573,70 +449,37 @@ for e in tqdm(range(NUM_EPOCHS)):
 
 
 			# make the predictions and calculate the validation loss
-			valid_pred_b1_gry, valid_pred_b1_rgb, valid_pred_b2_rgb, valid_kld_loss = unet(x_v)
+			valid_pred_b1_gry= unet(x_v)
 
 			valid_dice_loss = dice(valid_pred_b1_gry, y_v)
-			valid_mse_b1_ip = mse(valid_pred_b1_rgb.view(-1), x_v.view(-1))
-			valid_mse_b2_ip = mse(valid_pred_b2_rgb.view(-1), x_v.view(-1))
-			valid_mse_b1_b2 = mse(valid_pred_b1_rgb.view(-1), valid_pred_b2_rgb.view(-1))
-
-			valid_loss = valid_dice_loss + valid_mse_b1_ip + valid_mse_b2_ip + valid_mse_b1_b2 + valid_kld_loss
+			valid_loss = valid_dice_loss
    
 			# add the loss to the total validation loss so far
 			total_valid_dice_loss += valid_dice_loss
-			total_valid_mse_b1_ip += valid_mse_b1_ip
-			total_valid_mse_b2_ip += valid_mse_b2_ip
-			total_valid_mse_b1_b2 += valid_mse_b1_b2
-			total_valid_kld_loss_ += valid_kld_loss
-   
+
 			total_valid_loss += valid_loss
    
 	# calculate the average training loss
 	avg_train_loss = total_train_loss / trainSteps
- 
-	avg_train_dice_loss = total_train_dice_loss / trainSteps
-	avg_train_mse_b1_ip = total_train_mse_b1_ip / trainSteps
-	avg_train_mse_b2_ip = total_train_mse_b2_ip / trainSteps
-	avg_train_mse_b1_b2 = total_train_mse_b1_b2 / trainSteps
-	avg_train_kld_loss_ = total_train_kld_loss_ / trainSteps
+
    
 	# calculate the average validation loss
 	avg_valid_loss = total_valid_loss / validSteps
- 
-	avg_valid_dice_loss = total_valid_dice_loss / validSteps
-	avg_valid_mse_b1_ip = total_valid_mse_b1_ip / validSteps
-	avg_valid_mse_b2_ip = total_valid_mse_b2_ip / validSteps
-	avg_valid_mse_b1_b2 = total_valid_mse_b1_b2 / validSteps
-	avg_valid_kld_loss_ = total_valid_kld_loss_ / validSteps
- 
+
 	# update our training history
 
 	train_history["train_loss"].append(avg_train_loss.cpu().detach().numpy())
- 
-	train_history["train_dice_loss"].append(avg_train_dice_loss.cpu().detach().numpy())
-	train_history["train_mse_b1_ip"].append(avg_train_mse_b1_ip.cpu().detach().numpy())
-	train_history["train_mse_b2_ip"].append(avg_train_mse_b2_ip.cpu().detach().numpy())
-	train_history["train_mse_b1_b2"].append(avg_train_mse_b1_b2.cpu().detach().numpy())
-	train_history["train_kld_loss_"].append(avg_train_kld_loss_.cpu().detach().numpy())
- 
+
 	valid_history["valid_loss"].append(avg_valid_loss.cpu().detach().numpy())
- 
-	valid_history["valid_dice_loss"].append(avg_valid_dice_loss.cpu().detach().numpy())
-	valid_history["valid_mse_b1_ip"].append(avg_valid_mse_b1_ip.cpu().detach().numpy())
-	valid_history["valid_mse_b2_ip"].append(avg_valid_mse_b2_ip.cpu().detach().numpy())
-	valid_history["valid_mse_b1_b2"].append(avg_valid_mse_b1_b2.cpu().detach().numpy())
-	valid_history["valid_kld_loss_"].append(avg_valid_kld_loss_.cpu().detach().numpy())
- 
+
 	# print the model training and validation information
 	print("[INFO] EPOCH: {}/{}".format(e + 1, NUM_EPOCHS))
 
-	print("Train Loss : {:.4f}, Train Dice Loss : {:.4f}, Train MSE B1 ip : {:.4f}, Train MSE B2 ip : {:.4f}, Train MSE B1 B2 : {:.4f}, Train KLD Loss  : {:.4f}"
-    .format(avg_train_loss, avg_train_dice_loss, avg_train_mse_b1_ip, avg_train_mse_b2_ip, avg_train_mse_b1_b2, avg_train_kld_loss_))
+	print("Train Loss : {:.4f}".format(avg_train_loss))
  
-	print("Valid Loss : {:.4f}, Valid Dice Loss : {:.4f}, Valid MSE B1 ip : {:.4f}, Valid MSE B2 ip : {:.4f}, Valid MSE B1 B2 : {:.4f}, Valid KLD Loss  : {:.4f}"
-    .format(avg_valid_loss, avg_valid_dice_loss, avg_valid_mse_b1_ip, avg_valid_mse_b2_ip, avg_valid_mse_b1_b2, avg_valid_kld_loss_))
+	print("Valid Loss : {:.4f}".format(avg_valid_loss))
 
-	save_best_model(avg_valid_dice_loss, e, unet, optimizer)
+	save_best_model(avg_valid_loss, e, unet, optimizer)
 	
 # display the total time needed to perform the training
 endTime = time.time()
@@ -682,9 +525,6 @@ def prepare_plot(origImage, origMask, predMask):
 	figure.show()
 
 
-# In[ ]:
-
-
 def make_predictions(model, X, y):
 	# set model to evaluation mode
 	model.eval()
@@ -712,9 +552,6 @@ def make_predictions(model, X, y):
 		prepare_plot(orig, gtMask, predMask)
 
 
-# In[ ]:
-
-
 def DiceLoss_npy(y_true, y_pred, smooth=1):
     y_true_f = y_true.flatten()
     y_pred_f = y_pred.flatten()
@@ -722,13 +559,11 @@ def DiceLoss_npy(y_true, y_pred, smooth=1):
     score = (2. * np.sum(intersection) + smooth) / (np.sum(y_true_f) + np.sum(y_pred_f) + smooth)
     return (1-score).astype(np.float32)
 
+
 def mse_loss_npy(imageA, imageB):
     imageA_f = imageA.flatten()
     imageB_f = imageB.flatten()
     return (np.sum((imageA_f - imageB_f) ** 2)/len(imageA_f)).astype(np.float32)
-
-
-# In[ ]:
 
 
 def get_avg_batch_loss(model, X, y, batch_size=BATCH_SIZE):
@@ -793,9 +628,6 @@ def get_avg_batch_loss(model, X, y, batch_size=BATCH_SIZE):
     return d
 
 
-# In[1]:
-
-
 def get_item_loss(model, X, y, d={}):
     
     model.eval()
@@ -828,6 +660,7 @@ def get_item_loss(model, X, y, d={}):
         d['loss']      += (dice + mse_b1_ip + mse_b2_ip + mse_b1_b2 + kld)
     
     return d
+
 
 def get_total_loss(model, X, y, avg=False):
 
