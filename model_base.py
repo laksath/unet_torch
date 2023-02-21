@@ -4,10 +4,8 @@
 # import the necessary packages
 
 import torch
-import matplotlib.pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn as nn
@@ -23,22 +21,24 @@ from structure.save_load import SaveBestModel
 from structure.plots import plot_history
 from structure.seed import seed_program
 from structure.hyperparameter import *
+from structure.augmentation import transforms
 
+import warnings
+warnings.filterwarnings('ignore')
+
+print(DEVICE)
+print()
 
 random_seed = BASE_SEEDING # or any of your favorite number 
 seed_program(random_seed)
 
 
-X_train_npy,y_train_npy,X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
+X_train_npy, y_train_npy, X_test_npy ,y_test_npy ,X_valid_npy, y_valid_npy = train_test_valid_data(dataset,subdir)
 l = SegregateData(dataset, subdir)
 
-
-# define transformations
-transforms_ = transforms.Compose([transforms.ToTensor()])
-
 # create the train and test datasets
-trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms_)
-validDS = SegmentationDataset(X=X_valid_npy, y=y_valid_npy, transforms=transforms_)
+trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms(scale = SCALE,angle = ANGLE,flip_prob = FLIP_PROB))
+validDS = SegmentationDataset(X=X_valid_npy, y=y_valid_npy)
 
 print(f"[INFO] found {len(trainDS)} examples in the training set...")
 print(f"[INFO] found {len(validDS)} examples in the validation set...")
@@ -67,17 +67,16 @@ validSteps = len(validDS) // BASE_BATCH_SIZE
 
 # initialize a dictionary to store training history
 train_history = {
-    "train_loss": [],
+	"train_loss": [],
 }
 
 valid_history = {
 	"valid_loss": [],
-
 }
 
 # loop over epochs
-print("[INFO] training the network...")
 startTime = time.time()
+print(f"[INFO] training the network... start time : {startTime}")
 
 for e in tqdm(range(BASE_NUM_EPOCHS)):
 
@@ -85,25 +84,14 @@ for e in tqdm(range(BASE_NUM_EPOCHS)):
 
 	# set the model in training mode
 	unet.train()
- 
+
 	# initialize the total training and validation loss
 	total_train_loss = 0
-
 	total_train_dice_loss = 0
-	total_train_mse_b1_ip = 0
-	total_train_mse_b2_ip = 0
-	total_train_mse_b1_b2 = 0
-	total_train_kld_loss_ = 0
- 
-	total_valid_loss = 0
- 
-	total_valid_dice_loss = 0
-	total_valid_mse_b1_ip = 0
-	total_valid_mse_b2_ip = 0
-	total_valid_mse_b1_b2 = 0
-	total_valid_kld_loss_ = 0
 
-	# loop over the training set
+	total_valid_loss = 0
+	total_valid_dice_loss = 0
+
 	for (i, (x, y)) in enumerate(trainLoader):
 
 		# send the input to the device
@@ -128,13 +116,13 @@ for e in tqdm(range(BASE_NUM_EPOCHS)):
  
 	# switch off autograd
 	with torch.no_grad():
-    
+	
 		# set the model in evaluation mode
 		unet.eval()
   
 		# loop over the validation set
 		for (x_v, y_v) in validLoader:
-      
+	  
 			# send the input to the device
 			(x_v, y_v) = (x_v.to(DEVICE), y_v.to(DEVICE))
 

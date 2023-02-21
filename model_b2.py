@@ -1,52 +1,44 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# import the necessary packages
+
 import torch
-from torch.utils.data import Dataset
-import numpy as np
-import matplotlib.pyplot as plt
-import cv2
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn as nn
 
 import time
-import os
 from models.branch2_unet import UNet
 
 from structure.loss import DiceLoss
-from structure.loss import DiceLoss_npy
-from structure.loss import mse_loss_npy
 from structure.datasets import SegregateData
 from structure.datasets import train_test_valid_data
 from structure.datasets import SegmentationDataset
 from structure.save_load import SaveBestModel
 from structure.plots import plot_history
-from structure.plots import prepare_plot
-from structure.plots import make_predictions
-from structure.save_load import load_ckp
 from structure.seed import seed_program
 from structure.hyperparameter import *
+from structure.augmentation import transforms
 
+import warnings
+warnings.filterwarnings('ignore')
 
+print(DEVICE)
+print()
 
 random_seed = B2_SEEDING # or any of your favorite number 
 seed_program(random_seed)
 
 
-X_train_npy,y_train_npy,X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
+X_train_npy, y_train_npy, X_test_npy ,y_test_npy ,X_valid_npy, y_valid_npy = train_test_valid_data(dataset,subdir)
 l = SegregateData(dataset, subdir)
 
-
-# define transformations
-transforms_ = transforms.Compose([transforms.ToTensor()])
-
 # create the train and test datasets
-trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms_)
-validDS = SegmentationDataset(X=X_valid_npy, y=y_valid_npy, transforms=transforms_)
+trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms(scale = SCALE,angle = ANGLE,flip_prob = FLIP_PROB))
+validDS = SegmentationDataset(X=X_valid_npy, y=y_valid_npy)
 
 print(f"[INFO] found {len(trainDS)} examples in the training set...")
 print(f"[INFO] found {len(validDS)} examples in the validation set...")
@@ -58,7 +50,6 @@ validLoader = DataLoader(validDS, batch_size= B2_BATCH_SIZE, shuffle=True,drop_l
 # initialize our UNet model
 n_features = 64
 input_shape= 256
-
 unet = UNet(n_input_channels=3, n_output_channels=1, n_features= n_features).to(DEVICE)
 
 save_best_model = SaveBestModel(B2_MODEL_PATH)
@@ -123,7 +114,7 @@ for e in tqdm(range(B2_NUM_EPOCHS)):
 		dice_loss = dice(pred_b1_gry, y)
 		mse_b2_ip = mse(pred_b2_rgb.view(-1), x.view(-1))
 
-		loss = dice_loss + mse_b2_ip
+		loss = 0.5*dice_loss + 0.5*mse_b2_ip
 
 		# first, zero out any previously accumulated gradients, then perform backpropagation, and then update model parameters
 		optimizer.zero_grad()
@@ -157,7 +148,7 @@ for e in tqdm(range(B2_NUM_EPOCHS)):
 			valid_dice_loss = dice(valid_pred_b1_gry, y_v)
 			valid_mse_b2_ip = mse(valid_pred_b2_rgb.view(-1), x_v.view(-1))
 
-			valid_loss = valid_dice_loss + valid_mse_b2_ip
+			valid_loss = 0.5*valid_dice_loss + 0.5*valid_mse_b2_ip
    
 			# add the loss to the total validation loss so far
 			total_valid_dice_loss += valid_dice_loss

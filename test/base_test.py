@@ -25,11 +25,13 @@ from structure.hyperparameter import *
 
 from losses.base_loss import get_total_loss
 
+from structure.datasets import SegmentationDataset
+
 random_seed = BASE_SEEDING # or any of your favorite number
 seed_program(random_seed)
 
 
-X_train_npy, y_train_npy, X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
+X_train_npy, y_train_npy, X_test_npy ,y_test_npy ,X_valid_npy, y_valid_npy = train_test_valid_data(dataset,subdir)
 l = SegregateData(dataset, subdir)
 
 input_shape=256
@@ -38,8 +40,11 @@ unet = UNet(n_input_channels=3, n_output_channels=1, n_features= n_features).to(
 
 optimizer = Adam(unet.parameters(), lr=0.0001)
 
-# model, optimizer, _ = load_ckp_cpu('/workspace/data/torch/output/unet_dl1_e2000_base.pth',unet,optimizer)
-model, optimizer, _ = load_ckp('/workspace/data/torch/output/unet_dl1_e2000_base.pth',unet,optimizer)
+# model, optimizer, _ = load_ckp_cpu('/workspace/data/torch/output/base_aug.pth',unet,optimizer)
+print('base_aug_500')
+print()
+print()
+model, optimizer, _ = load_ckp('/workspace/data/torch/output/base_aug_500.pth',unet,optimizer)
 
 print(get_total_loss(model, X_train_npy, y_train_npy, True))
 print()

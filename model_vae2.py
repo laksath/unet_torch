@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torchvision import transforms
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn as nn
@@ -30,8 +31,6 @@ from structure.seed import seed_program
 
 from structure.hyperparameter import *
 
-from structure.augmentation import transforms
-
 print(DEVICE)
 print()
 
@@ -42,11 +41,12 @@ seed_program(random_seed)
 X_train_npy,y_train_npy,X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
 l = SegregateData(dataset, subdir)
 
-
+# define transformations
+transforms_ = transforms.Compose([transforms.ToTensor()])
 
 # create the train and test datasets
-trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms(scale = SCALE,angle = ANGLE,flip_prob = FLIP_PROB))
-validDS = SegmentationDataset(X=X_valid_npy, y=y_valid_npy)
+trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms_)
+validDS = SegmentationDataset(X=X_valid_npy, y=y_valid_npy, transforms=transforms_)
 
 print(f"[INFO] found {len(trainDS)} examples in the training set...")
 print(f"[INFO] found {len(validDS)} examples in the validation set...")
@@ -62,7 +62,7 @@ input_shape= 256
 unet = UNet(input_shape=input_shape, n_input_channels=3, n_output_channels_b1=1,
             n_output_channels_b2=3, n_features= n_features, latent_dim=128).to(DEVICE)
 
-save_best_model = SaveBestModel(VAE_MODEL_PATH)
+save_best_model = SaveBestModel(VAE_MODEL_PATH2)
 
 # initialize loss function and optimizer
 optimizer = Adam(unet.parameters(), lr= VAE_INIT_LR)
@@ -176,7 +176,7 @@ for e in tqdm(range(VAE_NUM_EPOCHS)):
 			valid_mse_b2_ip = mse(valid_pred_b2_rgb.view(-1), x_v.view(-1))
 			valid_mse_b1_b2 = mse(valid_pred_b1_rgb.view(-1), valid_pred_b2_rgb.view(-1))
 
-			valid_loss = 0.05*valid_dice_loss + 0.25*valid_mse_b1_ip + 0.25*valid_mse_b2_ip + 0.25*valid_mse_b1_b2 + 0.2*valid_kld_loss
+			valid_loss = 0.05*valid_dice_loss + 0.25*valid_mse_b1_ip + 0.25*valid_mse_b2_ip + 0.23*valid_mse_b1_b2 + 0.2*valid_kld_loss
    
 			# add the loss to the total validation loss so far
 			total_valid_dice_loss += valid_dice_loss
@@ -240,4 +240,4 @@ print("-"*150)
 print("[INFO] total time taken to train the model: {:.2f}s".format(endTime - startTime))
 
 
-plot_history(train_history, valid_history, VAE_PLOT_PATH)
+plot_history(train_history, valid_history, VAE_PLOT_PATH2)
