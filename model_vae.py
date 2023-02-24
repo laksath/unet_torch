@@ -3,34 +3,27 @@
 
 # import the necessary packages
 import torch
-import os
-import time
-from torch.utils.data import Dataset
-import numpy as np
-import matplotlib.pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch.nn as nn
 
+import time
 from models.vae_unet import UNet
+
 from structure.loss import DiceLoss
-from structure.loss import DiceLoss_npy
-from structure.loss import mse_loss_npy
 from structure.datasets import SegregateData
 from structure.datasets import train_test_valid_data
 from structure.datasets import SegmentationDataset
 from structure.save_load import SaveBestModel
 from structure.plots import plot_history
-from structure.plots import prepare_plot
-from structure.plots import make_predictions
-from structure.save_load import load_ckp
 from structure.seed import seed_program
-
 from structure.hyperparameter import *
-
 from structure.augmentation import transforms
+
+import warnings
+warnings.filterwarnings('ignore')
 
 print(DEVICE)
 print()
@@ -41,8 +34,6 @@ seed_program(random_seed)
 
 X_train_npy, y_train_npy, X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
 l = SegregateData(dataset, subdir)
-
-
 
 # create the train and test datasets
 trainDS = SegmentationDataset(X=X_train_npy, y=y_train_npy, transforms=transforms(scale = SCALE,angle = ANGLE,flip_prob = FLIP_PROB))
