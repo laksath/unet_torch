@@ -34,8 +34,8 @@ VAE_SEEDING = 1
 VAE_INIT_LR = 0.0001
 VAE_NUM_EPOCHS = 2000
 VAE_BATCH_SIZE = 32
-VAE_OUTPUT = "/workspace/data/torch/output/vae"
-VAE_MODEL_PATH = os.path.join(VAE_OUTPUT, "vae_2000_135350515.pth")
-VAE_PLOT_PATH = os.path.sep.join([VAE_OUTPUT, "vae_2000_135350515.png"])
+VAE_OUTPUT = "/workspace/data/torch/out/vae"
+VAE_MODEL_PATH = os.path.join(VAE_OUTPUT, "vae_1000_2020202020.pth")
+VAE_PLOT_PATH = os.path.sep.join([VAE_OUTPUT, "vae_1000_2020202020.png"])
 
 

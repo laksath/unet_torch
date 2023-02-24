@@ -26,8 +26,8 @@ from structure.seed import seed_program
 from structure.hyperparameter import *
 from losses.vae_loss import get_total_loss
 
-path_ = ['/workspace/data/torch/op/vae_2000_00525252520.pth','/workspace/data/torch/op/vae200025121200150.pth']
-print(path_)
+pth = '/workspace/data/torch/out/vae_1000_2020202020.pth'
+print(pth)
 
 random_seed = VAE_SEEDING # or any of your favorite number 
 seed_program(random_seed)
@@ -42,22 +42,18 @@ unet = UNet(input_shape=input_shape, n_input_channels=3, n_output_channels_b1=1,
 optimizer = Adam(unet.parameters(), lr=0.0001)
 
 # model, optimizer, _ = load_ckp_cpu('/workspace/data/torch/output/tmp.pth',unet,optimizer)
-for pth in path_:
-    model, optimizer, _ = load_ckp(pth,unet,optimizer)
 
-    print(get_total_loss(model, X_train_npy, y_train_npy, True))
-    print()
-    print(get_total_loss(model, X_test_npy, y_test_npy, True))
-    print()
-    print(get_total_loss(model, X_valid_npy, y_valid_npy, True))
-    print()
-    print()
+model, optimizer, _ = load_ckp(pth,unet,optimizer)
 
-    for i in range(3):
-        for j in range(3):
-            print(get_total_loss(model, l[i][j][0], l[i][j][1], True))
-        print()
-    
-    print()
-    print('-'*150)
+print(get_total_loss(model, X_train_npy, y_train_npy, True))
+print()
+print(get_total_loss(model, X_test_npy, y_test_npy, True))
+print()
+print(get_total_loss(model, X_valid_npy, y_valid_npy, True))
+print()
+print()
+
+for i in range(3):
+    for j in range(3):
+        print(get_total_loss(model, l[i][j][0], l[i][j][1], True))
     print()

@@ -39,7 +39,7 @@ random_seed = VAE_SEEDING # or any of your favorite number
 seed_program(random_seed)
 
 
-X_train_npy,y_train_npy,X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
+X_train_npy, y_train_npy, X_test_npy ,y_test_npy ,X_valid_npy,y_valid_npy = train_test_valid_data(dataset,subdir)
 l = SegregateData(dataset, subdir)
 
 
@@ -137,7 +137,8 @@ for e in tqdm(range(VAE_NUM_EPOCHS)):
 		mse_b1_b2 = mse(pred_b1_rgb.view(-1), pred_b2_rgb.view(-1))
 
 		# loss = 0.1*dice_loss + 0.2*mse_b1_ip + 0.2*mse_b2_ip + 0.2*mse_b1_b2 + 0.3*kld_loss
-		loss = 0.25*dice_loss + 0.12*mse_b1_ip + 0.12*mse_b2_ip + 0.01*mse_b1_b2 + 0.5*kld_loss
+		# loss = 0.25*dice_loss + 0.12*mse_b1_ip + 0.12*mse_b2_ip + 0.01*mse_b1_b2 + 0.5*kld_loss
+		loss = 0.2*dice_loss + 0.2*mse_b1_ip + 0.2*mse_b2_ip + 0.2*mse_b1_b2 + 0.2*kld_loss
 
 		# first, zero out any previously accumulated gradients, then perform backpropagation, and then update model parameters
 		optimizer.zero_grad()
@@ -176,7 +177,8 @@ for e in tqdm(range(VAE_NUM_EPOCHS)):
 			valid_mse_b2_ip = mse(valid_pred_b2_rgb.view(-1), x_v.view(-1))
 			valid_mse_b1_b2 = mse(valid_pred_b1_rgb.view(-1), valid_pred_b2_rgb.view(-1))
 
-			valid_loss = 0.05*valid_dice_loss + 0.25*valid_mse_b1_ip + 0.25*valid_mse_b2_ip + 0.25*valid_mse_b1_b2 + 0.2*valid_kld_loss
+			# valid_loss = 0.05*valid_dice_loss + 0.25*valid_mse_b1_ip + 0.25*valid_mse_b2_ip + 0.25*valid_mse_b1_b2 + 0.2*valid_kld_loss
+			valid_loss = 0.2*valid_dice_loss + 0.2*valid_mse_b1_ip + 0.2*valid_mse_b2_ip + 0.2*valid_mse_b1_b2 + 0.2*valid_kld_loss
    
 			# add the loss to the total validation loss so far
 			total_valid_dice_loss += valid_dice_loss

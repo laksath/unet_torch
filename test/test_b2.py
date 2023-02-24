@@ -39,7 +39,7 @@ unet = UNet(n_input_channels=3, n_output_channels=1, n_features= n_features).to(
 optimizer = Adam(unet.parameters(), lr=0.0001)
 
 # model, optimizer, _ = load_ckp_cpu('/workspace/data/torch/output/unet_b2.pth',unet,optimizer)
-model, optimizer, _ = load_ckp('/workspace/data/torch/output/unet_b2.pth',unet,optimizer)
+model, optimizer, _ = load_ckp('/workspace/data/torch/out/2b/b2_1000_50_50.pth',unet,optimizer)
 
 print(get_total_loss(model, X_train_npy, y_train_npy, True))
 print()

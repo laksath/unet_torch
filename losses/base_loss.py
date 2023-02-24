@@ -26,10 +26,10 @@ def get_item_loss(model, X, y, d={}):
 		
 		pred_b1_gry = pred_b1_gry.squeeze().cpu().numpy()
 		
-		dice      = 1-DiceLoss_npy(y.cpu().numpy(), pred_b1_gry)
+		dice      = DiceLoss_npy(y.cpu().numpy(), pred_b1_gry)
 
 		d['dice']      += dice
-		d['acc']      += (dice)
+		d['acc']      += (1 - dice)
 	
 	return d
 
@@ -47,5 +47,7 @@ def get_total_loss(model, X, y, avg=False):
 	if(avg):
 		for k in d.keys():
 			d[k]/=len(y)
-		
+	
+	d['dice']=1-d['dice']
+
 	return d

@@ -44,7 +44,7 @@ optimizer = Adam(unet.parameters(), lr=0.0001)
 print('base_aug_500')
 print()
 print()
-model, optimizer, _ = load_ckp('/workspace/data/torch/output/base_aug_500.pth',unet,optimizer)
+model, optimizer, _ = load_ckp('/workspace/data/torch/output/base_aug_1000.pth',unet,optimizer)
 
 print(get_total_loss(model, X_train_npy, y_train_npy, True))
 print()
